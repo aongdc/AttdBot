@@ -1,7 +1,6 @@
 """
 Generates key for bot usage authorisation and admin verification.
 """
-import datetime
 from _key import *
 
 def usage_code():
