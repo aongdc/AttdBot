@@ -1,7 +1,7 @@
 """
 Generates key for bot usage authorisation and admin verification.
 """
-from _key import *
+from _._key import *
 
 def usage_code():
     f = usage_code()

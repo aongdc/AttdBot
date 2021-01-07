@@ -8,7 +8,7 @@ This is used for cases where the same keyboard option leads to a different callb
 
 Class for Keyboard is declared here. Used for ease of setting up the InlineKeyboard for each stage.
 """
-from _keyboards import *
+from _._keyboards import *
 from times import times
 from telegram import InlineKeyboardButton, KeyboardButton
 
