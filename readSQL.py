@@ -6,8 +6,10 @@ import datetime
 
 
 class Database:
-    def __init__(self, db_path):
+    def __init__(self, db_path, setup=False):
         self.db_path = db_path
+        if setup:
+            self.setup()
 
     def create_connection(self):
         """
@@ -24,6 +26,18 @@ class Database:
             print(e)
 
         return self.conn
+
+    def setup(self):
+        self.conn = self.create_connection()
+        self.conn.cursor().execute("CREATE TABLE IF NOT EXISTS users ("
+                                   "time_registered TEXT,"
+                                   "name INTEGER,"
+                                   "user_id INTEGER NOT NULL,"
+                                   "first_name TEXT,"
+                                   "user_name TEXT,"
+                                   "is_admin INTEGER NOT NULL DEFAULT 0,"
+                                   "is_deleted INTEGER NOT NULL DEFAULT 0)")
+        self.conn.commit()
 
     def get_users_table(self, active_only=True):
         cmd = "SELECT * FROM users"
@@ -97,6 +111,7 @@ class Database:
 
 if __name__ == '__main__':
     from envs import DATABASE_PATH
+
     # lst = Database(DATABASE_PATH).get_user_id_lst()
     conn = Database(DATABASE_PATH).create_connection()
     conn.commit()

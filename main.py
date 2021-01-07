@@ -35,7 +35,7 @@ def verify_user(update, context):
     user = update.message.from_user
     user_id = user.id
 
-    db = readSQL.Database(DATABASE_PATH)
+    db = readSQL.Database(DATABASE_PATH, setup=True)
     user_id_lst = db.get_user_id_lst()
 
     if user_id not in user_id_lst:
