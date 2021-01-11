@@ -1,7 +1,7 @@
 import datetime
 from dateutil import relativedelta
 import sys
-from envs import CRED_FILE, WORKBOOK_NAME, WORKBOOK_CODES_SHEETNAME
+from envs import CRED_FILE, WORKBOOK_NAME, WORKBOOK_CODES_SHEETNAME, ROW_QUOTA_MAP
 from gspread_formatting import *
 import calendar
 import holidays
@@ -59,12 +59,12 @@ def write_dates(ws, date_obj, num_days_in_month, last_col_letter):
     num_workdays = num_days_in_month
     sg_hols = holidays.SG()
     for week in cal:
-        for _date, day in week:
+        for date, day in week:
             is_weekend, is_ph = False, False
-            if _date == 0:
+            if date == 0:
                 continue
             else:
-                _date = datetime.date(year=date_obj.year, month=date_obj.month, day=_date)
+                _date = datetime.date(year=date_obj.year, month=date_obj.month, day=date)
                 if day == 5 or day == 6:
                     is_weekend = True
                 if _date in sg_hols:
@@ -72,7 +72,6 @@ def write_dates(ws, date_obj, num_days_in_month, last_col_letter):
 
                 if is_weekend or is_ph:
                     num_workdays -= 1
-
                 days.append([calendar.day_name[day], _date, is_weekend, is_ph])
 
     # Add days of month
@@ -86,7 +85,7 @@ def write_dates(ws, date_obj, num_days_in_month, last_col_letter):
 
     # Add dates for month
     edit_list = ws.range(f'A2:{last_col_letter}2')
-    edit = ["NAME / DATE"] + [f"{pair[1]}/{date_obj.month}/{date_obj.strftime('%y')}" for pair in days]
+    edit = ["NAME / DATE"] + [f"{pair[1].day}/{date_obj.month}/{date_obj.strftime('%y')}" for pair in days]
     k = 0
     while k < len(edit):
         edit_list[k].value = edit[k]
@@ -112,10 +111,13 @@ def write_users(ws, num_users):
 def write_hols_and_data_validation(ws, bg_fmts, last_user_row, days):
     edit_list_wkend = []
     edit_list_ph = []
-    exclude = ['WEEKEND', 'PH', 'HL', 'WFH', 'ATT', 'CSE', 'OL (AM)', 'OL (PM)', 'OL (AMPM)']
+    exclude = ['WEEKEND', 'PH', 'HL', 'OLA', 'OLP', 'OLF']
     valid_vals = ['1'] + [k for k in bg_fmts.keys()]
     for val in exclude:
-        valid_vals.remove(val)
+        if val in valid_vals:
+            valid_vals.remove(val)
+        else:
+            print(f"[WARNING] Exclude value {val} does not match any of the codes!")
     val_rule = DataValidationRule(BooleanCondition('ONE_OF_LIST', valid_vals), showCustomUi=True, strict=True)
 
     for j in range(len(days)):
@@ -125,10 +127,10 @@ def write_hols_and_data_validation(ws, bg_fmts, last_user_row, days):
                 ph = days[j][3]
             else:
                 ph = None
-            edit_list_wkend.append((ws.range(f'{cur_col}3:{cur_col}{last_user_row}'), ph))
+            edit_list_wkend.append((ws.range(f'{cur_col}3:{cur_col}{last_user_row+6}'), ph))
         elif days[j][3]:
             ph = days[j][3]
-            edit_list_ph.append((ws.range(f'{cur_col}3:{cur_col}{last_user_row}'), ph))
+            edit_list_ph.append((ws.range(f'{cur_col}3:{cur_col}{last_user_row+6}'), ph))
         else:
             # Set data validation rules
             set_data_validation_for_cell_range(ws, f'{cur_col}3:{cur_col}{last_user_row}', val_rule)
@@ -151,30 +153,84 @@ def write_hols_and_data_validation(ws, bg_fmts, last_user_row, days):
         ws.update_cells([edit for edits in edit_list_ph for edit in edits])
 
 
-def write_proj_total_str(ws, header, edit_row, last_user_row, num_days, count_start_row=3):
-    edit_list = ws.range(f'A{edit_row}:{num_to_letter(num_days + 1)}{edit_row}')
+def write_proj_total_strength_and_pct(ws, header, edit_row, last_user_row, num_days, count_start_row=3):
+    edit_list = ws.range(f'A{edit_row}:{num_to_letter(num_days + 1)}{edit_row + 1}')
+    # eg. edit_list = [A1, A2, A3, ..., B1, B2, B3, ...]
     edit_list[0].value = header
+    edit_list[num_days+1].value = header + ' %'
     k = 1
     while k < num_days + 1:
         col = num_to_letter(k + 1)
         edit_list[k].value = f'=COUNTBLANK({col}{count_start_row}:{col}{last_user_row})+' \
-                             f'SUM({col}{count_start_row}:{col}{last_user_row}))'
+                             f'SUM({col}{count_start_row}:{col}{last_user_row})'
+        edit_list[k+num_days+1].value = f'={col}{edit_row}/({last_user_row}-{count_start_row}+1)'
         k += 1
     ws.update_cells(edit_list, value_input_option="USER_ENTERED")
 
 
-def write_workdays_col(ws, last_row, num_days, num_workdays, num_void_rows_from_back=3):
+def write_workdays_col(ws, last_row, num_days, num_workdays, num_void_rows_from_back=6):
     last_col_letter = num_to_letter(num_days + 2)
     edit_list = ws.range(f'{last_col_letter}1:{last_col_letter}{last_row}')
-    edit_list[0].value = "WORKDAYS"
+    edit_list[0].value = "WD"
     edit_list[1].value = num_workdays
     for p in range(1, num_void_rows_from_back + 1):
         edit_list[-p].value = "X"
     k = 2
     while k < last_row - num_void_rows_from_back:
         edit_list[k].value = f'=SUM(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1})+' \
-                             f'COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=OTHER (W)")+' \
+                             f'COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=OTHW")+' \
                              f'COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=MA*")'
+        k += 1
+    ws.update_cells(edit_list, value_input_option="USER_ENTERED")
+
+
+def write_quota_con_col(ws, last_row, num_days, num_void_rows_from_back=6):
+    col = num_days + 3
+    last_col_letter = num_to_letter(col)
+    edit_list = ws.range(f'{last_col_letter}1:{last_col_letter}{last_row}')
+    edit_list[0].value = "LL/OL"
+    edit_list[1].value = "QCTM"
+    for p in range(1, num_void_rows_from_back + 1):
+        edit_list[-p].value = "X"
+    k = 2
+    while k < last_row - num_void_rows_from_back:
+        edit_list[k].value = f'=COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=*LA")/2+' \
+                             f'COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=*LP")/2+' \
+                             f'COUNTIF(B{k + 1}:{num_to_letter(num_days + 1)}{k + 1}, "=*LF")'
+        k += 1
+    ws.update_cells(edit_list, value_input_option="USER_ENTERED")
+
+
+def write_quota_rem_col(ws, last_row, num_days, num_void_rows_from_back=6):
+    col = num_days + 4
+    last_col_letter = num_to_letter(col)
+    edit_list = ws.range(f'{last_col_letter}1:{last_col_letter}{last_row}')
+    edit_list[0].value = "LL/OL"
+    edit_list[1].value = "QRFY"
+    for p in range(1, num_void_rows_from_back + 1):
+        edit_list[-p].value = "X"
+    k = 2
+    while k < last_row - num_void_rows_from_back:
+        edit_list[k].value = f'={num_to_letter(col+1)}{k+1}-{num_to_letter(col-1)}{k+1}'
+        k += 1
+    ws.update_cells(edit_list, value_input_option="USER_ENTERED")
+
+
+def write_quota_total_col(ws, last_row, num_days, num_void_rows_from_back=6):
+    col = num_days + 5
+    last_col_letter = num_to_letter(col)
+    edit_list = ws.range(f'{last_col_letter}1:{last_col_letter}{last_row}')
+    edit_list[0].value = "LL/OL"
+    edit_list[1].value = "QTFY"
+    for p in range(1, num_void_rows_from_back + 1):
+        edit_list[-p].value = "X"
+    k = 2
+    # TODO: not hardcode quotas
+    quotas = ROW_QUOTA_MAP
+    quota = None
+    while k < last_row - num_void_rows_from_back:
+        quota = quotas.get(k+1, quota)
+        edit_list[k].value = quota
         k += 1
     ws.update_cells(edit_list, value_input_option="USER_ENTERED")
 
@@ -224,8 +280,8 @@ def create_new(cred_file, wb_name):
         # Add sheet
         last_sheet_idx += 1
         wb.add_sheet(title,
-                     rows=num_users + 5,
-                     cols=num_days + 2,
+                     rows=num_users + 8,
+                     cols=num_days + 5,
                      idx=last_sheet_idx)
 
         # Open sheet for editing
@@ -238,42 +294,57 @@ def create_new(cred_file, wb_name):
         # Add user names
         last_user_row = write_users(ws, num_users)
 
-        # Write text weekends and public holidays, else validation rules
-        write_hols_and_data_validation(ws, bg_fmts, last_user_row, days)
-
         # Write projected/total row for NSFs only
         edit_row = last_user_row + 1
-        write_proj_total_str(ws, "PROJ / TTL 1", edit_row, last_user_row, num_days,
-                             count_start_row=15)
+        write_proj_total_strength_and_pct(ws, "PROJ / TTL 1", edit_row, last_user_row, num_days,
+                                          count_start_row=15)
 
         # Write projected/total row for on-site parade state
-        edit_row = last_user_row + 2
-        write_proj_total_str(ws, "PROJ / TTL 2", edit_row, last_user_row, num_days,
-                             count_start_row=7)
+        edit_row += 2
+        write_proj_total_strength_and_pct(ws, "PROJ / TTL 2", edit_row, last_user_row, num_days,
+                                          count_start_row=7)
 
         # Write projected/total row for all
-        edit_row = last_user_row + 3
-        write_proj_total_str(ws, "PROJ / TTL 3", edit_row, last_user_row, num_days,
-                             count_start_row=3)
+        edit_row += 2
+        write_proj_total_strength_and_pct(ws, "PROJ / TTL 3", edit_row, last_user_row, num_days,
+                                          count_start_row=3)
 
+        # Write text weekends and public holidays, else validation rules
+        # Must do after writing projected/total rows as WEEKENDS/PH will and should overwrite the formulas
+        write_hols_and_data_validation(ws, bg_fmts, last_user_row, days)
+
+        last_row = edit_row + 1
         # Write workdays column
-        write_workdays_col(ws, edit_row, num_days, num_workdays, num_void_rows_from_back=3)
+        write_workdays_col(ws, last_row, num_days, num_workdays, num_void_rows_from_back=6)
+
+        # Write quota columns
+        write_quota_con_col(ws, last_row, num_days, num_void_rows_from_back=6)
+        write_quota_rem_col(ws, last_row, num_days, num_void_rows_from_back=6)
+        write_quota_total_col(ws, last_row, num_days, num_void_rows_from_back=6)
 
         # Freeze header rows and columns
         wb.freeze(ws, num_cols=1, num_rows=2)
 
         # Set basic formatting
         batch = batch_updater(ws.spreadsheet)
-        header_col_fmt = CellFormat(textFormat=TextFormat(bold=True), horizontalAlignment='CENTER')
-        header_row_fmt = CellFormat(textFormat=TextFormat(bold=True), horizontalAlignment='CENTER')
         basic_fmt = CellFormat(horizontalAlignment='CENTER', verticalAlignment='MIDDLE')
-        batch.format_cell_range(ws, f'A:{last_col_letter}', basic_fmt)
+        header_col_fmt = CellFormat(textFormat=TextFormat(bold=True))
+        header_row_fmt = CellFormat(textFormat=TextFormat(bold=True))
+        pct_ttl_row_fmt = CellFormat(numberFormat=NumberFormat(type='PERCENT', pattern='#%'))
+        void_cells_fmt = CellFormat(backgroundColor=Color(red=67/255, green=67/255, blue=67/255, alpha=1))
+        batch.format_cell_range(ws, f'A:{num_to_letter(edit_row + 1)}', basic_fmt)
         batch.format_cell_range(ws, '1:2', header_col_fmt)
         batch.format_cell_range(ws, 'A', header_row_fmt)
-        batch.set_row_height(ws, f'3:{edit_row}', 35)
+        batch.format_cell_range(ws, f'{last_user_row + 2}:{last_user_row + 2}', pct_ttl_row_fmt)
+        batch.format_cell_range(ws, f'{last_user_row + 4}:{last_user_row + 4}', pct_ttl_row_fmt)
+        batch.format_cell_range(ws, f'{last_user_row + 6}:{last_user_row + 6}', pct_ttl_row_fmt)
+        batch.format_cell_range(ws, f'{last_col_letter}{last_user_row + 1}:{num_to_letter(num_days+5)}{last_row}',
+                                void_cells_fmt)
+        batch.set_row_height(ws, f'3:{edit_row + 1}', 35)
         batch.execute()
 
         # Set conditional formatting
+        # Weekends/PH
         cond_fmt_rules = get_conditional_format_rules(ws)
         for val, bg_fmt in bg_fmts.items():
             if val in ('WEEKEND', 'PH'):
@@ -289,6 +360,38 @@ def create_new(cred_file, wb_name):
                     )
                 )
             )
+        # Total/Proj Rows
+        cond = 'NUMBER_BETWEEN'
+        cond_fmt_rules.append(
+            ConditionalFormatRule(
+                ranges=[GridRange.from_a1_range(f"{last_user_row + 1}:{last_row}", ws)],
+                booleanRule=BooleanRule(
+                    condition=BooleanCondition(cond, ['50%', '70%']),
+                    format=CellFormat(backgroundColor=Color(red=246/255, green=178/255, blue=107/255, alpha=1))
+                )
+            )
+        )
+        cond_fmt_rules.append(
+            ConditionalFormatRule(
+                ranges=[GridRange.from_a1_range(f"{last_user_row + 1}:{last_row}", ws)],
+                booleanRule=BooleanRule(
+                    condition=BooleanCondition(cond, ['1%', '50%']),
+                    format=CellFormat(backgroundColor=Color(red=224/255, green=102/255, blue=102/255, alpha=1))
+                )
+            )
+        )
+        # LL Columns
+        cond = 'NUMBER_LESS'
+        cond_fmt_rules.append(
+            ConditionalFormatRule(
+                ranges=[GridRange.from_a1_range(f"{num_to_letter(num_days+4)}:{num_to_letter(num_days+5)}", ws)],
+                booleanRule=BooleanRule(
+                    condition=BooleanCondition(cond, ['0']),
+                    format=CellFormat(backgroundColor=Color(red=244/255, green=199/255, blue=195/255, alpha=1))
+                )
+            )
+        )
+        
         cond_fmt_rules.save()
 
         added += 1

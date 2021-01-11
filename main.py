@@ -32,6 +32,11 @@ user_lst_seg = users(as_dict=False, segmented_list=2)
 
 
 def verify_user(update, context):
+    """
+    All /start commands call this function.
+    User is asked to authenticate by sending the key code.
+    """
+
     user = update.message.from_user
     user_id = user.id
 
@@ -70,9 +75,9 @@ def verify_user_confirmation(update, context):
 
 
 def initial(update, context):
-    """All /start commands call this function.
-    If user_id is known, continue to start;
-    else, find out who it is."""
+    """
+    If user_id is known, continue to start; else, find out who it is.
+    """
 
     user_id = update.message.from_user.id
     db = readSQL.Database(DATABASE_PATH)
@@ -92,8 +97,9 @@ def initial(update, context):
 
 
 def register(update, context):
-    """If user_id has not been registered, write to database.
-    Then, continue to _start."""
+    """
+    If user_id has not been registered, write to database. Then, continue to _start.
+    """
 
     query = update.callback_query
     user_id = query.from_user.id
@@ -132,8 +138,9 @@ def start(update, context):
 
 
 def _start(update, context):
-    """Modified start function for new users,
-    as message should be edited and not replied to with new message."""
+    """
+    Modified start function for new users, as message should be edited and not replied to with new message.
+    """
 
     query = update.callback_query
 
@@ -221,7 +228,6 @@ def error(update, context):
 
 
 def main():
-    # updater.dispatcher.add_handler(CommandHandler('start', start, Filters.user(user_id=[x for x in readSQL.Database(DATABASE_PATH).get_user_id_lst()])))
     # Initialise and Verify user
     dispatcher.add_handler(ConversationHandler(
         entry_points=[CommandHandler('start', verify_user)],
