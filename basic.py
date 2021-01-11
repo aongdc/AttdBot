@@ -1,6 +1,6 @@
 from admin import *
 from botCalendar import Calendar
-from envs import DATE_FORMAT, CRED_FILE, WORKBOOK_NAME
+from envs import DATE_FORMAT, CRED_FILE, WORKBOOK_NAME, CD_MAP_DE, CD_MAP_EN
 import keyboards
 from keyboards import Keyboard
 from readSheets import Workbook
@@ -47,10 +47,14 @@ def view_basic(update, context, date=None, edit_start=True):
     stat_2 = ws.cell(row, col).value
 
     if stat_1 == 1 or stat_1 == '1' or stat_1 == '':
-        stat_1 = 'Present'
+        stat_1 = 'PRESENT'
 
     if stat_2 == 1 or stat_2 == '1' or stat_2 == '':
-        stat_2 = 'Present'
+        stat_2 = 'PRESENT'
+
+    # Convert cds
+    stat_1 = CD_MAP_DE.get(stat_1, stat_1)
+    stat_2 = CD_MAP_DE.get(stat_2, stat_2)
 
     # assume if edit_start is False, view_basic was called from view other date
     kb = Keyboard(keyboards.view_basic) if edit_start else Keyboard(keyboards.view_basic_2)
@@ -95,7 +99,8 @@ def view_more(update, context):
         ws, row, col = coords(wb, user_num, date=dates[i][0])
         stat = ws.cell(row, col).value
         if stat == 1 or stat == '1' or stat == '':
-            stat = "Present"
+            stat = "PRESENT"
+        stat = CD_MAP_DE.get(stat, stat)
         stats.append(f"Status for {dates[i][1]}, {dates[i][0]}: {stat}")
         i += 1
 
@@ -113,7 +118,6 @@ def view_other(update, context):
     log_print(update, context)
 
     reply_markup = Calendar(view_only=True).setup()
-    print(reply_markup)
     remove_inline(update, context)
     context.bot.send_message(chat_id=update.callback_query.from_user.id,
                              text="For which date do you wish to view your status?",
@@ -152,7 +156,6 @@ def edit_day(update, context, full_date=None, view_only=False, for_report=False,
     if ", " in cur_weekday:
         cur_weekday = cur_weekday.split(', ')[1]
     cur_weekday_name = datetime.datetime.strptime(cur_weekday, DATE_FORMAT).strftime('%A')
-    print(view_only, for_report, for_week, batch_edit)
 
     if view_only and (not for_report or not for_week or not batch_edit):
         query.edit_message_text(text=f"Fetching status for {cur_weekday_name}, {cur_weekday}...")
@@ -173,14 +176,11 @@ def edit_day(update, context, full_date=None, view_only=False, for_report=False,
         stat = ws.cell(row, col).value
 
         if stat == 1 or stat == '1' or stat == '':
-            stat = 'Present'
+            stat = 'PRESENT'
+        stat = CD_MAP_DE.get(stat, stat)
 
         kb = Keyboard(keyboards.edit_day)
         reply_markup = InlineKeyboardMarkup(kb.setup())
-        # context.bot.send_message(chat_id=update.callback_query.from_user.id,
-        #                          text=f"Current status for {cur_weekday}: {stat}\n"
-        #                          "What do you want to update it to?",
-        #                          reply_markup=reply_markup)
         query.edit_message_text(f"Current status for {cur_weekday}: {stat}\n"
                                 "What do you want to update it to?",
                                 reply_markup=reply_markup)
@@ -210,8 +210,10 @@ def update_data(update, context):
     stat_new = query.data
     stat_update = stat_new
 
-    if stat_update == "Present":
-        stat_update = "1" if (cur_weekday == datetime.datetime.today().strftime(DATE_FORMAT)) else ""
+    if stat_update == "PRESENT":
+        stat_update = "1" # if (cur_weekday == datetime.datetime.today().strftime(DATE_FORMAT)) else ""
+    else:
+        stat_update = CD_MAP_EN.get(stat_update, stat_update)
 
     ws.update_cell(row, col, stat_update)
 

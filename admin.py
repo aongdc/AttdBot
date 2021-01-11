@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardMarkup
 from botCalendar import Calendar
-from envs import DATE_FORMAT, CRED_FILE, WORKBOOK_NAME
+from envs import DATE_FORMAT, CRED_FILE, WORKBOOK_NAME, CD_MAP_EN, CD_MAP_DE, RPT_TITLE
 import keyboards
 from keyboards import Keyboard
 from readSheets import Workbook
@@ -65,7 +65,7 @@ def admin_report_date(update, context, date=None, for_week=False, batch_edit=Fal
         nl = '\n'
 
         if not batch_edit:
-            header = f"SCVU PARADE STATE\n" \
+            header = f"{RPT_TITLE}\n" \
                      f"{date}\n" \
                      f"{datetime.datetime.strptime(date, DATE_FORMAT).strftime('%A')}\n\n" \
                      f"{f'Current' if date == datetime.datetime.today().strftime(DATE_FORMAT) else 'Expected'} Strength: {present_num} / {total_num}\n" \
@@ -109,7 +109,7 @@ def admin_report_date(update, context, date=None, for_week=False, batch_edit=Fal
         else:
             new_date = date_obj - datetime.timedelta(days=day_num)
 
-        full = [f"SCVU PARADE STATE (PROJECTED)\n"
+        full = [f"{RPT_TITLE} (PROJECTED)\n"
                 f"for week starting {new_date.strftime(DATE_FORMAT)}\n"
                 f"retrieved {datetime.datetime.today().strftime('%d/%m/%Y %H%MH')}\n"
                 f"============="]
@@ -230,8 +230,9 @@ def admin_bat_edit_date_interm(update, context):
     stat_new = keyboards._for_admin_edit.get(query.data)
     stat_update = stat_new
 
-    if stat_update == "Present":
-        stat_update = "1" if admin_chosen_date == datetime.datetime.today().strftime(DATE_FORMAT) else ""
+    if stat_update == "PRESENT":
+        stat_update = "1" # if admin_chosen_date == datetime.datetime.today().strftime(DATE_FORMAT) else ""
+    stat_update = CD_MAP_EN.get(stat_update, stat_update)
 
     num_users = len(user_lst)
     i = 0
@@ -288,7 +289,8 @@ def admin_edit_user_spec(update, context, user_name, user_num, date=datetime.dat
     stat = ws.cell(row, col).value
 
     if stat == 1 or stat == '1' or stat == '':
-        stat = 'Present'
+        stat = 'PRESENT'
+    stat = CD_MAP_DE.get(stat, stat)
 
     kb = Keyboard(keyboards.edit_day, for_admin_edit=True, user_num=user_num)
     reply_markup = InlineKeyboardMarkup(kb.setup())
@@ -331,8 +333,9 @@ def admin_update_data(update, context):
     stat_new = keyboards._admin_edit_day[query.data.split(', ')[0]]
     stat_update = stat_new
 
-    if stat_update == "Present":
-        stat_update = "1" if (datetime.datetime.strptime(cur_weekday, DATE_FORMAT) == datetime.datetime.today()) else ""
+    if stat_update == "PRESENT":
+        stat_update = "1" # if (datetime.datetime.strptime(cur_weekday, DATE_FORMAT) == datetime.datetime.today()) else ""
+    stat_update = CD_MAP_EN.get(stat_update, stat_update)
 
     ws.update_cell(row, col, stat_update)
 
